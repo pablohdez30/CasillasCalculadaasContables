@@ -1,0 +1,203 @@
+        if (this.checkBox1.Checked && esCasillaCalculada(registro.SubInforme, infoComplementaria.ID_CASILLA, false, registro.VarGlobal1, registro.VarGlobal2))
+        {
+            registrosNoInsertados++;
+            Aplicacion.PonTraza("<WARNING>Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque es calculada y se ha seleccionado ignorar ajustes en calculadas</WARNING>", 5);
+            msgWarning += "Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque es calculada y se ha seleccionado ignorar ajustes en calculadas" + Environment.NewLine + Environment.NewLine;
+        }
+        else if (this.checkBox3.Checked && esCasillaContable(registro.SubInforme, infoComplementaria.ID_CASILLA))
+        {
+            registrosNoInsertados++;
+            Aplicacion.PonTraza("<WARNING>Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque tiene parametrización contable y se ha seleccionado ignorar ajustes en casillas con parametrización contable (Referencia/Contabilidad)</WARNING>", 5);
+            msgWarning += "Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque tiene parametrización contable y se ha seleccionado ignorar ajustes en casillas con parametrización contable (Referencia/Contabilidad)" + Environment.NewLine + Environment.NewLine;
+        }
+        else if (this.checkBox4.Checked && esCasillaCalculada(registro.SubInforme, infoComplementaria.ID_CASILLA, true, registro.VarGlobal1, registro.VarGlobal2))
+        {
+            registrosNoInsertados++;
+            Aplicacion.PonTraza("<WARNING>Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque es calculada y se ha seleccionado ignorar ajustes en calculadas del mismo Informe</WARNING>", 5);
+            msgWarning += "Ajustes Excel: no se ha insertado el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ") porque es calculada y se ha seleccionado ignorar ajustes en calculadas del mismo Informe" + Environment.NewLine + Environment.NewLine;
+        }
+        else
+        {
+            if (EliminaAjustesEstaCasilla == true)
+            {//22/07/2009 Cambio ME. Añadimos registro.GrupoEntidad
+                string claveCacheAjustesCasillasEliminados = registro.GrupoEntidad + "_" + registro.SubInforme + "_" + registro.FechaDatos + "_" + Secuencia + "_" + infoComplementaria.ID_CASILLA + "_" + registro.VarGlobal1 + "_" + registro.VarGlobal2 + "_" + registro.VarLocal;
+                if (CacheAjustesCasillasEliminados.Contains(claveCacheAjustesCasillasEliminados) == false)
+                {
+                    try
+                    {
+                        CacheAjustesCasillasEliminados.Add(claveCacheAjustesCasillasEliminados, 1);
+                        int nAj = borrarAjustesPreviamenteCasilla(registro.GrupoEntidad, registro.SubInforme, registro.FechaDatos, Secuencia, infoComplementaria.ID_CASILLA, registro.VarGlobal1, registro.VarGlobal2, registro.VarLocal);
+                    }
+                    catch (Exception ExBorrando)
+                    {
+                        Aplicacion.PonTraza(Aplicacion.Literal("916") + " " + registro.SubInforme + "," + registro.FechaDatos + ",Entidad declarante " + registro.GrupoEntidad + ",Sec " + Secuencia + ",Cas " + infoComplementaria.ID_CASILLA + ",Err:" + ExBorrando.Message, 1);
+                        msgError += Aplicacion.Literal("916") + " " + registro.SubInforme + "," + registro.FechaDatos + ",Entidad declarante " + registro.GrupoEntidad + ",Sec " + Secuencia + ",Cas " + infoComplementaria.ID_CASILLA + ",Err:" + ExBorrando.Message + Environment.NewLine + Environment.NewLine;
+                        Cursor.Current = Cursors.Arrow;
+                        DialogResult res = MessageBox.Show(this, Aplicacion.Literal("916") + " " + registro.SubInforme + "," + registro.FechaDatos + ",Entidad declarante " + registro.GrupoEntidad + ",Sec " + Secuencia + ",Cas " + infoComplementaria.ID_CASILLA + ",Err:" + ExBorrando.Message + "\r\n" + Aplicacion.Literal("917"), Aplicacion.Literal("174"), MessageBoxButtons.OKCancel, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1);
+                        if (res == DialogResult.Cancel)
+                        {
+                            throw new Exception("ERR_ELIMINANDO");
+                        }
+                        Cursor.Current = Cursors.WaitCursor;
+
+                    }
+                }
+            }
+
+            //INSERCION DEL AJUSTE
+            int resultadoInsertarRegistro = insertaRegistro(registro, infoComplementaria, Secuencia);
+
+            if (resultadoInsertarRegistro == 1)
+            {
+                RegistroImporteSecuenciaCasilla registrosInsertados2;
+                registrosInsertados++;
+                //Para evitar el actualizado de los ajustes eliminados que ya se han insertado.
+                if (ajustesEliminados.TryGetValue(registro.CalcularClaveSinSecuencia(), out registrosInsertados2))
+                {
+                    ajustesEliminados.Remove(registro.CalcularClaveSinSecuencia());
+                }
+
+            }
+            else if (resultadoInsertarRegistro == 2) // Se han importado comentarios al supervisor
+            {
+                Aplicacion.PonTraza("<WARNING>Ajustes Excel: se ha detectado comentario al supervisor. Dado que esta funcionalidad está en desuso se debe insertar el comentario manualmente. (EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                    registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                    registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")</WARNING>", 2);
+                msgWarning += "Ajustes Excel: se ha detectado comentario al supervisor. Dado que esta funcionalidad está en desuso se debe insertar el comentario manualmente. (EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                    registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                    registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")" + Environment.NewLine + Environment.NewLine;
+            }
+            else
+            {
+                registrosNoInsertados++;
+                Aplicacion.PonTraza("<WARNING>Ajustes Excel: no se pudo insertar el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                    registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                    registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")</WARNING>", 2);
+                msgWarning += "Ajustes Excel: no se pudo insertar el Ajuste a la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+                    registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+                    registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")" + Environment.NewLine + Environment.NewLine;
+            }
+        }
+    }
+    else
+    {
+        //Aquí debería incrementarse/log los no insertados, ¿no?
+        //registrosNoInsertados++;
+    }
+    #endregion INSERCION AJUSTE
+}
+else
+{
+    registrosNoInsertados++;
+    Aplicacion.PonTraza("<WARNING>Ajustes Excel: no se encontró la información de la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+        registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+        registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")</WARNING>", 2);
+    msgWarning += "Ajustes Excel: no se encontró la información de la Casilla a AJUSTAR(EntidadDeclarante:" + registro.GrupoEntidad + ",Subinforme:" + registro.SubInforme + ",Casilla:" +
+        registro.CodigoCasilla + ",VarG1:" + registro.VarGlobal1 + ",VarG2:" + registro.VarGlobal2 + ",VarL:" +
+        registro.VarLocal + ",FechaDatos:" + registro.FechaDatos + ",Sec:" + Secuencia + ")" + Environment.NewLine + Environment.NewLine;
+}
+
+
+
+
+
+---------------------esCasillaContable-----------------------
+
+        private bool esCasillaContable(string vIdSubinforme, string vIdCasilla)
+		{
+			try
+			{
+#if (EN_LOCAL)
+                IproxyLanzadorQuery svc = new proxyLanzadorQuery();
+#else
+                System.ServiceModel.ChannelFactory<IproxyLanzadorQuery> canal = SIRBE.ObjRemotos.UTILES.ChannelCreator.CreateChannel<IproxyLanzadorQuery>(
+                  new Uri("net.tcp://" + Aplicacion.gServidor + ":" + Aplicacion.gPuerto + "/proxyLanzadorQuery"));
+                IproxyLanzadorQuery svc = canal.CreateChannel();
+#endif
+                //Para obtener los TIPO_ORIGEN de los orígenes de la casilla, con el objeto de identificar las casillas 
+                //en función del checkbox de IGNORAR AJUSTES SOBRE CASILLAS CON PARAMETRIZACION CONTABLE (REFERENCIA Y CONTABILIDAD)
+                string[] param = {vIdSubinforme, vIdCasilla};
+
+                try
+                {
+                    // probado Oracle SLB.ObjRemotos.WCFPruebas.TODOTest("proxyLanzadorQuery - llamada al método generarQueryConsultaYLanza. - PTE probar Debug (SQL,Oracle) y DebugRemoto");
+                    resultQuery res = svc.generarQueryConsultaYLanza(Aplicacion.datosSesion.idSesion, "00109", param, CacheConfiguracion.getCache("idioma"));
+
+                    // probado Oracle SLB.ObjRemotos.WCFPruebas.TODOTest("proxyLanzadorQuery - Probar. Se sustituye por la variable result(List<string[]>) del objeto resultQuery ");
+                    if (res.result.Count != 0 && SLB.Utils.UtilsString.NullAString(((string[])res.result[0])[0]).Equals("") == false)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        // probado Oracle SLB.ObjRemotos.WCFPruebas.TODOTest("proxyLanzadorQuery - llamada al método generarQueryConsultaYLanza. - PTE probar Debug (SQL,Oracle) y DebugRemoto");
+                        res = svc.generarQueryConsultaYLanza(Aplicacion.datosSesion.idSesion, "00091", param, CacheConfiguracion.getCache("idioma"));
+                        if (res.result.Count != 0)
+                        {
+                            // probado Oracle SLB.ObjRemotos.WCFPruebas.TODOTest("proxyLanzadorQuery - Probar. Se sustituye por la variable result(List<string[]>) del objeto resultQuery ");
+                            foreach (string[] Tipo_Origen in res.result)
+                            {
+                                if (Tipo_Origen[0] == "3")
+                                {
+                                    //En cuanto algún origen no sea de OPERACIONES (4) o CALCULADO (1) o REFERENCIA
+                                    //la casilla ya no es contable asi q rompo el bucle devolviendo false
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+                        else
+                        {
+                            // La casilla No tiene orígenes luego no es contable
+                            return false;
+                        }
+                    }
+                }
+                finally
+                {
+#if (!EN_LOCAL)
+                    SIRBE.ObjRemotos.UTILES.ChannelCreator.CerrarConexionSVC(canal);
+#endif
+                }
+				//return true;
+				//					if (res.numError == 0)
+				//					{
+				//						//No ha habido errores
+				//						resultado= ((String[])res.resultado[0])[0];
+				//						return true;
+				//					}
+				//					else
+			}
+			catch
+			{
+				return true;
+			}
+		}
+		
+		------------------00109---------------------
+		
+		case "00109"://frmImportarExcel esCasillaContable
+    {
+        switch (bbdd)
+        {
+            case ConstantesBD.BD_Oracle:
+            case ConstantesBD.BD_SQLServer:
+                {
+                    sql = "SELECT MAX(ID_SUBINFORME) FROM " + EsquemaBD + "T_EBE_RELACIO WHERE ID_SUBINFORME = '" + parametros[0] + "' AND ID_CASILLA = '" + parametros[1] + "' AND FECHA_BAJA IS NULL";
+                    break;
+                }
+        }
+        break;
+    }
