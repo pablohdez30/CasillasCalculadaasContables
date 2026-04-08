@@ -1,0 +1,21 @@
+PROCEDURE USP_PROCESAR_ESTADO_FICHERO (
+		pUsuario 	    IN VARCHAR2,
+        pIdioma  	    IN VARCHAR2,
+        pIdFichero      IN NUMERIC,
+        pFechaDatos     IN Date,
+        pGrupoEntidad   IN NUMERIC,
+        pIdInformeFichero IN varchar2,
+        pVersionFichero     IN varchar2,
+        pModoAjustes IN NUMERIC,
+        pSecuencia_Escogida IN NUMERIC,
+        pVersion_Escogida IN VARCHAR2,
+        pBorrarAjustesPrevios IN VARCHAR2,
+        pPermitirAjustarCalculadas IN VARCHAR2,
+		pAniadirCerosEnExcepciones4410 IN INT,
+		pAniadirCerosEnExcepcionesTEBE IN INT,
+		pImpEstadoCalculadoOPlantilla IN INT,
+        pHostName IN VARCHAR2,
+        pResultado 	OUT sys_refcursor    
+	);
+
+	
