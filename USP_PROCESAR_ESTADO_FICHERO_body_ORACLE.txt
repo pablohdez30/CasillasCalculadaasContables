@@ -15,7 +15,8 @@ PROCEDURE USP_PROCESAR_ESTADO_FICHERO (
 	pAniadirCerosEnExcepcionesTEBE IN INT,
     pImpEstadoCalculadoOPlantilla IN INT,
     pHostName IN VARCHAR2,
-    pResultado 	      OUT sys_refcursor    
+    pIgnorarContables IN VARCHAR2 DEFAULT '0',
+    pResultado 	      OUT sys_refcursor
 ) IS
 /*
 
@@ -177,6 +178,7 @@ vCargaPlantillas VARCHAR2(5 CHAR);
 vVariacionFila INT;
 vTieneParamPlantilla INT;
 pModoIgnorarCalculadas INT ;
+pModoIgnorarContables INT ;
 
 --Para el Gestor Tareas:
 vID_TAREA               NUMBER;
@@ -233,6 +235,7 @@ BEGIN
     
     
     pModoIgnorarCalculadas := NVL(TO_NUMBER(pPermitirAjustarCalculadas), 0);
+    pModoIgnorarContables := NVL(TO_NUMBER(pIgnorarContables), 0);
     --Para El Gestor DE TAREAS
     vHostnameEjecutaTarea := pHostname;
     vTipoGeneracion := 'IMPORTACION';
@@ -1636,12 +1639,12 @@ END;
     --(Si se ha seleccionado Ignorar casillas calculdas)
     ----------------------------------------------------------------------------
       IF COALESCE(pModoAjustes,0) = 1
-           AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4) THEN
-        
+           AND (COALESCE(pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(pModoIgnorarContables,0) = 1) THEN
+
             vPaso := 129;
-        
+
             DELETE FROM T_EBE_IMPM_AUX_CALCULADAS_IGN;
-        
+
             INSERT INTO T_EBE_IMPM_AUX_CALCULADAS_IGN
             (
                 ID_CASILLA,
@@ -1670,7 +1673,22 @@ END;
                     , a.TIPO_ORIGEN
                     , a.VARIACIONES_APLICA
             ),
-            CALCULADAS_A_IGNORAR AS
+            ORIG_CONTABLE AS
+            (
+                -- Casillas con parametrización contable directa en T_EBE_RELACIO (query 00109)
+                SELECT DISTINCT r.ID_SUBINFORME, r.ID_CASILLA
+                FROM T_EBE_RELACIO r
+                WHERE r.ID_SUBINFORME = vID_SUBINFORME
+                  AND r.FECHA_BAJA IS NULL
+                UNION
+                -- Casillas con algún origen de tipo contabilidad TIPO_ORIGEN = 3 (query 00091 fallback)
+                SELECT DISTINCT a.ID_SUBINFORME, a.ID_CASILLA
+                FROM T_EBE_ORIGEN_CASILLA_REAL a
+                WHERE a.ID_SUBINFORME = vID_SUBINFORME
+                  AND a.FECHA_BAJA IS NULL
+                  AND a.TIPO_ORIGEN = 3
+            ),
+            CASILLAS_A_IGNORAR AS
             (
                 SELECT
                       x.ID_CASILLA
@@ -1679,12 +1697,12 @@ END;
                     , x.ID_VARIACION_FILA
                     , CASE
                         WHEN COUNT(o.ID_CASILLA) = 0 THEN 0
-        
+
                         WHEN MAX(CASE WHEN o.TIPO_ORIGEN NOT IN (1,4) AND o.VARIACIONES_APLICA_NORM IS NULL THEN 1 ELSE 0 END) = 1 THEN 0
-        
+
                         WHEN COALESCE(pModoIgnorarCalculadas,0) = 4
                              AND MAX(CASE WHEN o.ES_MISMO_INFORME = 0 AND o.VARIACIONES_APLICA_NORM IS NULL THEN 1 ELSE 0 END) = 1 THEN 0
-        
+
                         WHEN
                             SUM(CASE WHEN o.TIPO_ORIGEN = 1 AND o.VARIACIONES_APLICA_NORM IS NOT NULL THEN 1 ELSE 0 END) > 0
                             AND
@@ -1717,13 +1735,17 @@ END;
                             =
                             SUM(CASE WHEN o.TIPO_ORIGEN = 1 AND o.VARIACIONES_APLICA_NORM IS NOT NULL THEN 1 ELSE 0 END)
                         THEN 0
-        
+
                         ELSE 1
                       END AS ES_CALCULADA
+                    , MAX(CASE WHEN co.ID_CASILLA IS NOT NULL THEN 1 ELSE 0 END) AS ES_CONTABLE
                 FROM T_EBE_IMPM_AUX_CASILLAS_VAR x
                 LEFT JOIN ORIG o
                     ON  o.ID_SUBINFORME = vID_SUBINFORME
                     AND o.ID_CASILLA    = x.ID_CASILLA
+                LEFT JOIN ORIG_CONTABLE co
+                    ON  co.ID_SUBINFORME = vID_SUBINFORME
+                    AND co.ID_CASILLA    = x.ID_CASILLA
                 WHERE x.SITUACION = 'VIENE'
                 GROUP BY
                       x.ID_CASILLA
@@ -1736,8 +1758,9 @@ END;
                 , c.ID_VARIACION_1
                 , c.ID_VARIACION_2
                 , c.ID_VARIACION_FILA
-            FROM CALCULADAS_A_IGNORAR c
-            WHERE c.ES_CALCULADA = 1;
+            FROM CASILLAS_A_IGNORAR c
+            WHERE (c.ES_CALCULADA = 1 AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4))
+               OR (c.ES_CONTABLE = 1 AND COALESCE(pModoIgnorarContables,0) = 1);
         
             UPDATE T_EBE_IMPM_AUX_CASILLAS_VAR x
                SET x.SITUACION = 'IGNORADA'
@@ -1756,7 +1779,7 @@ END;
         
             IF vDEBUG = 1 THEN
                 msgTraza := TO_CHAR(SYSDATE, 'YYYYMMDD HH24:MI:SS') ||
-                            '. UPDATE T_EBE_IMPM_AUX_CASILLAS_VAR -> IGNORADA (calculadas): ' ||
+                            '. UPDATE T_EBE_IMPM_AUX_CASILLAS_VAR -> IGNORADA (calculadas/contables): ' ||
                             TO_CHAR(vNFA);
                 DBMS_OUTPUT.put_line(msgTraza);
                 INSERT INTO T_EBE_TRACE (FECHA,CLIENTE,CLAVE2,NIVEL,USUARIO,MENSAJE)
@@ -1806,7 +1829,7 @@ END;
                         OR (
                                ajustes.SITUACION = 'IGNORADA'
                            AND COALESCE(pBorrarAjustesPrevios,'0') IN ('1','2')
-                           AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4)
+                           AND (COALESCE(pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(pModoIgnorarContables,0) = 1)
                         )
                     )
                 );
@@ -1901,7 +1924,7 @@ END;
             -- deben conservar el valor ya existente en RGI y comportarse como 'RGI'
             vPaso := 158;
             
-            IF (COALESCE(pBorrarAjustesPrevios,'0') = '0' AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4)) THEN
+            IF (COALESCE(pBorrarAjustesPrevios,'0') = '0' AND (COALESCE(pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(pModoIgnorarContables,0) = 1)) THEN
                 UPDATE T_EBE_IMPM_AUX_CASILLAS_VAR
                    SET SITUACION = 'RGI'
                  WHERE SITUACION = 'IGNORADA';
@@ -2736,7 +2759,7 @@ END;
                 OR (
                        SITUACION = 'IGNORADA'
                    AND COALESCE(pBorrarAjustesPrevios,'0') IN ('1','2')
-                   AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4)
+                   AND (COALESCE(pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(pModoIgnorarContables,0) = 1)
                 )
             )
             ;
@@ -3458,7 +3481,7 @@ vEXISTEN_AJUSTES_EN_VL := 1;
                       OR (
                              excel.SITUACION = 'IGNORADA'
                          AND COALESCE(pBorrarAjustesPrevios,'0') IN ('1','2')
-                         AND COALESCE(pModoIgnorarCalculadas,0) IN (1,4)
+                         AND (COALESCE(pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(pModoIgnorarContables,0) = 1)
                       )
                   ) 
                   

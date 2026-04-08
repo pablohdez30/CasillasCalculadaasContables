@@ -15,7 +15,8 @@ PROCEDURE USP_PROCESAR_ESTADO_FICHERO (
 		pAniadirCerosEnExcepcionesTEBE IN INT,
 		pImpEstadoCalculadoOPlantilla IN INT,
         pHostName IN VARCHAR2,
-        pResultado 	OUT sys_refcursor    
+        pIgnorarContables IN VARCHAR2 DEFAULT '0',
+        pResultado 	OUT sys_refcursor
 	);
 
 	
