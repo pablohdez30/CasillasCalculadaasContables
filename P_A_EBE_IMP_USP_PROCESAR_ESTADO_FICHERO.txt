@@ -23,7 +23,8 @@ ALTER PROCEDURE [dbo].[P_A_EBE_IMP_USP_PROCESAR_ESTADO_FICHERO]
 	@pAniadirCerosEnExcepciones4410 INT,
 	@pAniadirCerosEnExcepcionesTEBE int,
 	@pImpEstadoCalculadoOPlantilla INT,
-	@pHostName VARCHAR(64)
+	@pHostName VARCHAR(64),
+	@pIgnorarContables VARCHAR(10) = '0'
 )
 AS
 /*
@@ -211,6 +212,7 @@ DECLARE @vEstadoFinal int;
 
 DECLARE @vFECHA_BAJA_NULA datetime;
 DECLARE @pModoIgnorarCalculadas INT = 0;
+DECLARE @pModoIgnorarContables INT = 0;
 
 --Para el Gestor Tareas:
 DECLARE @vID_TAREA INT;
@@ -466,6 +468,11 @@ BEGIN TRY
 	IF ISNULL(@pPermitirAjustarCalculadas,'0') <> '0'
 	BEGIN
 		SET @pModoIgnorarCalculadas = TRY_CAST(@pPermitirAjustarCalculadas AS INT);
+	END
+
+	IF ISNULL(@pIgnorarContables,'0') <> '0'
+	BEGIN
+		SET @pModoIgnorarContables = TRY_CAST(@pIgnorarContables AS INT);
 	END
 
 	----
@@ -1653,12 +1660,16 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 
 
 		/* ********************************************************************************************
-		   MARCAR COMO IGNORADAS LAS CASILLAS DE AJUSTE QUE SEAN CALCULADAS
+		   MARCAR COMO IGNORADAS LAS CASILLAS DE AJUSTE QUE SEAN CALCULADAS Y/O CONTABLES
+		   - Calculada: determinada por los orígenes (TIPO_ORIGEN 1,4) y dependencias
+		   - Contable: tiene registros en T_EBE_RELACIO (query 00109) o algún origen
+		     con TIPO_ORIGEN = 3 (query 00091 fallback)
+		   - Ambos modos pueden estar activos simultáneamente (checkBox1/4 + checkBox3)
 		   - Debe ir DESPUÉS de cargar en #T_EBE_IMPM_AUX_CASILLAS_VAR las filas que vienen del Excel
 		   - Debe ir ANTES del paso 130 (DELETE de RGI)
 		********************************************************************************************* */
 		IF COALESCE(@pModoAjustes,0) = 1
-		   AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,4)
+		   AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1)
 		BEGIN
 			SET @vPaso = 129;
 
@@ -1683,7 +1694,22 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 					, a.TIPO_ORIGEN
 					, a.VARIACIONES_APLICA
 			),
-			CALCULADAS_A_IGNORAR AS
+			ORIG_CONTABLE AS
+			(
+				-- Casillas con parametrización contable directa en T_EBE_RELACIO (query 00109)
+				SELECT DISTINCT r.ID_SUBINFORME, r.ID_CASILLA
+				FROM T_EBE_RELACIO r
+				WHERE r.ID_SUBINFORME = @vID_SUBINFORME
+				  AND r.FECHA_BAJA IS NULL
+				UNION
+				-- Casillas con algún origen de tipo contabilidad TIPO_ORIGEN = 3 (query 00091 fallback)
+				SELECT DISTINCT a.ID_SUBINFORME, a.ID_CASILLA
+				FROM T_EBE_ORIGEN_CASILLA_REAL a
+				WHERE a.ID_SUBINFORME = @vID_SUBINFORME
+				  AND a.FECHA_BAJA IS NULL
+				  AND a.TIPO_ORIGEN = 3
+			),
+			CASILLAS_A_IGNORAR AS
 			(
 				SELECT
 					  x.ID_CASILLA
@@ -1734,10 +1760,14 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 
 						ELSE 1
 					  END AS ES_CALCULADA
+					, MAX(CASE WHEN co.ID_CASILLA IS NOT NULL THEN 1 ELSE 0 END) AS ES_CONTABLE
 				FROM #T_EBE_IMPM_AUX_CASILLAS_VAR x
 				LEFT JOIN ORIG o
 					ON  o.ID_SUBINFORME = @vID_SUBINFORME
 					AND o.ID_CASILLA    = x.ID_CASILLA
+				LEFT JOIN ORIG_CONTABLE co
+					ON  co.ID_SUBINFORME = @vID_SUBINFORME
+					AND co.ID_CASILLA    = x.ID_CASILLA
 				OUTER APPLY
 				(
 					SELECT
@@ -1764,82 +1794,22 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 			UPDATE x
 			   SET x.SITUACION = 'IGNORADA' -- IGNORADA = 'VIENE' pero quiero ignorarla
 			FROM #T_EBE_IMPM_AUX_CASILLAS_VAR x
-			INNER JOIN CALCULADAS_A_IGNORAR c
+			INNER JOIN CASILLAS_A_IGNORAR c
 				ON  c.ID_CASILLA        = x.ID_CASILLA
 				AND c.ID_VARIACION_1    = x.ID_VARIACION_1
 				AND c.ID_VARIACION_2    = x.ID_VARIACION_2
 				AND c.ID_VARIACION_FILA = x.ID_VARIACION_FILA
 			WHERE x.SITUACION = 'VIENE'-- DUPLICADO, RGI, NO VIENE
-			  AND c.ES_CALCULADA = 1;
+			  AND (
+				(c.ES_CALCULADA = 1 AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,4))
+				OR
+				(c.ES_CONTABLE = 1 AND COALESCE(@pModoIgnorarContables,0) = 1)
+			  );
 
 			SET @vNFA = @@ROWCOUNT;
 			IF (@vDEBUG = 1)
 			BEGIN
-				SET @msgTraza = 'UPDATE #T_EBE_IMPM_AUX_CASILLAS_VAR -> IGNORADA (calculadas): ' + CAST(@vNFA AS varchar);
-				PRINT CONVERT(varchar, GETDATE(), 113) + '. ' + @msgTraza;
-			END;
-
-		END;
-
-
-		/* ********************************************************************************************
-		   MARCAR COMO IGNORADAS LAS CASILLAS DE AJUSTE QUE SEAN CONTABLES
-		   Una casilla es contable si:
-		     1) Tiene registros en T_EBE_RELACIO (parametrización contable directa), O
-		     2) Tiene algún origen con TIPO_ORIGEN = 3 (contabilidad) en T_EBE_ORIGEN_CASILLA_REAL
-		   Replica la lógica de esCasillaContable del código C# (queries 00109 y 00091)
-		   - Debe ir DESPUÉS de cargar en #T_EBE_IMPM_AUX_CASILLAS_VAR las filas que vienen del Excel
-		   - Debe ir ANTES del paso 130 (DELETE de RGI)
-		********************************************************************************************* */
-		IF COALESCE(@pModoAjustes,0) = 1
-		   AND COALESCE(@pModoIgnorarCalculadas,0) = 3
-		BEGIN
-			SET @vPaso = 129;
-
-			;WITH CONTABLES_A_IGNORAR AS
-			(
-				SELECT DISTINCT
-					  x.ID_CASILLA
-					, x.ID_VARIACION_1
-					, x.ID_VARIACION_2
-					, x.ID_VARIACION_FILA
-				FROM #T_EBE_IMPM_AUX_CASILLAS_VAR x
-				WHERE x.SITUACION = 'VIENE'
-				  AND (
-						-- Criterio 1: la casilla tiene parametrización contable en T_EBE_RELACIO (query 00109)
-						EXISTS (
-							SELECT 1
-							FROM T_EBE_RELACIO r
-							WHERE r.ID_SUBINFORME = @vID_SUBINFORME
-							  AND r.ID_CASILLA    = x.ID_CASILLA
-							  AND r.FECHA_BAJA IS NULL
-						)
-						OR
-						-- Criterio 2: la casilla tiene algún origen de tipo contabilidad (TIPO_ORIGEN = 3) (query 00091)
-						EXISTS (
-							SELECT 1
-							FROM T_EBE_ORIGEN_CASILLA_REAL a
-							WHERE a.ID_SUBINFORME = @vID_SUBINFORME
-							  AND a.ID_CASILLA    = x.ID_CASILLA
-							  AND a.FECHA_BAJA IS NULL
-							  AND a.TIPO_ORIGEN   = 3
-						)
-				  )
-			)
-			UPDATE x
-			   SET x.SITUACION = 'IGNORADA'
-			FROM #T_EBE_IMPM_AUX_CASILLAS_VAR x
-			INNER JOIN CONTABLES_A_IGNORAR c
-				ON  c.ID_CASILLA        = x.ID_CASILLA
-				AND c.ID_VARIACION_1    = x.ID_VARIACION_1
-				AND c.ID_VARIACION_2    = x.ID_VARIACION_2
-				AND c.ID_VARIACION_FILA = x.ID_VARIACION_FILA
-			WHERE x.SITUACION = 'VIENE';
-
-			SET @vNFA = @@ROWCOUNT;
-			IF (@vDEBUG = 1)
-			BEGIN
-				SET @msgTraza = 'UPDATE #T_EBE_IMPM_AUX_CASILLAS_VAR -> IGNORADA (contables): ' + CAST(@vNFA AS varchar);
+				SET @msgTraza = 'UPDATE #T_EBE_IMPM_AUX_CASILLAS_VAR -> IGNORADA (calculadas/contables): ' + CAST(@vNFA AS varchar);
 				PRINT CONVERT(varchar, GETDATE(), 113) + '. ' + @msgTraza;
 			END;
 
@@ -1986,7 +1956,7 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 			SET @vPaso = 158;
 
 
-			IF (COALESCE(@pBorrarAjustesPrevios,0) = 0 AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
+			IF (COALESCE(@pBorrarAjustesPrevios,0) = 0 AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
 			BEGIN
 			UPDATE #T_EBE_IMPM_AUX_CASILLAS_VAR
 					SET SITUACION = 'RGI'
@@ -2902,7 +2872,7 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 			WHERE ID_TIPO_CASILLA = 'DATO'
 			UNION SELECT DISTINCT @vID_SUBINFORME, ID_VARIACION_1, ID_VARIACION_2, ID_VARIACION_FILA 
 			FROM #T_EBE_IMPM_AUX_CASILLAS_VAR
-			WHERE SITUACION IN ('VIENE')  OR (SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4));
+			WHERE SITUACION IN ('VIENE')  OR (SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1));
 			;
 			SET @vNFA = @@ROWCOUNT;
 			IF (@vDEBUG=1)
@@ -3519,7 +3489,7 @@ SET @vEXISTEN_AJUSTES_EN_VL = 1;
 			WHERE 1=1
 			AND (
 			    excel.SITUACION IN ('VIENE','NO VIENE')
-				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
+				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
 			) --excluímos los duplicados que deberán arreglarlos. metemos las de datos que no vienen de variaciones nuevas
 			AND c.FORMATO IN ('TEXTO')
 
@@ -3619,7 +3589,7 @@ SET @vEXISTEN_AJUSTES_EN_VL = 1;
 			WHERE 1=1
 			AND (
 			    excel.SITUACION IN ('VIENE','NO VIENE')
-				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
+				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
 			) --excluímos los duplicados que deberán arreglarlos. metemos las de datos que no vienen de variaciones nuevas
 			AND coalesce(c.FORMATO, '') not IN ('TEXTO')
 
