@@ -23,8 +23,7 @@ ALTER PROCEDURE [dbo].[P_A_EBE_IMP_USP_PROCESAR_ESTADO_FICHERO]
 	@pAniadirCerosEnExcepciones4410 INT,
 	@pAniadirCerosEnExcepcionesTEBE int,
 	@pImpEstadoCalculadoOPlantilla INT,
-	@pHostName VARCHAR(64),
-	@pIgnorarContables VARCHAR(10) = '0'
+	@pHostName VARCHAR(64)
 )
 AS
 /*
@@ -212,7 +211,6 @@ DECLARE @vEstadoFinal int;
 
 DECLARE @vFECHA_BAJA_NULA datetime;
 DECLARE @pModoIgnorarCalculadas INT = 0;
-DECLARE @pModoIgnorarContables INT = 0;
 
 --Para el Gestor Tareas:
 DECLARE @vID_TAREA INT;
@@ -468,11 +466,6 @@ BEGIN TRY
 	IF ISNULL(@pPermitirAjustarCalculadas,'0') <> '0'
 	BEGIN
 		SET @pModoIgnorarCalculadas = TRY_CAST(@pPermitirAjustarCalculadas AS INT);
-	END
-
-	IF ISNULL(@pIgnorarContables,'0') <> '0'
-	BEGIN
-		SET @pModoIgnorarContables = TRY_CAST(@pIgnorarContables AS INT);
 	END
 
 	----
@@ -1799,7 +1792,7 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 		   - Debe ir ANTES del paso 130 (DELETE de RGI)
 		********************************************************************************************* */
 		IF COALESCE(@pModoAjustes,0) = 1
-		   AND COALESCE(@pModoIgnorarContables,0) = 1
+		   AND COALESCE(@pModoIgnorarCalculadas,0) = 3
 		BEGIN
 			SET @vPaso = 129;
 
@@ -1993,7 +1986,7 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 			SET @vPaso = 158;
 
 
-			IF (COALESCE(@pBorrarAjustesPrevios,0) = 0 AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
+			IF (COALESCE(@pBorrarAjustesPrevios,0) = 0 AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
 			BEGIN
 			UPDATE #T_EBE_IMPM_AUX_CASILLAS_VAR
 					SET SITUACION = 'RGI'
@@ -2909,7 +2902,7 @@ select * from T_EBE_IMPM_REGISTRO where id_fichero=65 and id_grupo_entidad=61 or
 			WHERE ID_TIPO_CASILLA = 'DATO'
 			UNION SELECT DISTINCT @vID_SUBINFORME, ID_VARIACION_1, ID_VARIACION_2, ID_VARIACION_FILA 
 			FROM #T_EBE_IMPM_AUX_CASILLAS_VAR
-			WHERE SITUACION IN ('VIENE')  OR (SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1));
+			WHERE SITUACION IN ('VIENE')  OR (SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4));
 			;
 			SET @vNFA = @@ROWCOUNT;
 			IF (@vDEBUG=1)
@@ -3526,7 +3519,7 @@ SET @vEXISTEN_AJUSTES_EN_VL = 1;
 			WHERE 1=1
 			AND (
 			    excel.SITUACION IN ('VIENE','NO VIENE')
-				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
+				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
 			) --excluímos los duplicados que deberán arreglarlos. metemos las de datos que no vienen de variaciones nuevas
 			AND c.FORMATO IN ('TEXTO')
 
@@ -3626,7 +3619,7 @@ SET @vEXISTEN_AJUSTES_EN_VL = 1;
 			WHERE 1=1
 			AND (
 			    excel.SITUACION IN ('VIENE','NO VIENE')
-				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND (COALESCE(@pModoIgnorarCalculadas,0) IN (1,4) OR COALESCE(@pModoIgnorarContables,0) = 1))
+				OR (excel.SITUACION = 'IGNORADA' AND COALESCE(@pBorrarAjustesPrevios,0) IN (1,2) AND COALESCE(@pModoIgnorarCalculadas,0) IN (1,3,4))
 			) --excluímos los duplicados que deberán arreglarlos. metemos las de datos que no vienen de variaciones nuevas
 			AND coalesce(c.FORMATO, '') not IN ('TEXTO')
 
